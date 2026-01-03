@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>FPS Math Game</title>
+<style>
+body { margin:0; overflow:hidden; font-family:sans-serif; background:#222; color:white; }
+#overlay {
+  position:absolute; top:10px; left:10px; z-index:10; font-size:18px; 
+  display:flex; flex-direction:column; gap:5px;
+}
+</style>
+</head>
+<body>
+<div id="overlay">
+  <div>Team Blue: <span id="blueScore">0</span></div>
+  <div>Team Red: <span id="redScore">0</span></div>
+  <div>Time Left: <span id="timer">300</span> sec</div>
+  <div>Click screen to lock mouse and shoot laser</div>
+  <div>Press "E" near bombsite to plant bomb</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.152.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.152.0/examples/js/controls/PointerLockControls.js"></script>
+<script>
+// --- Scene Setup ---
+let scene = new THREE.Scene();
+scene.background = new THREE.Color(0x222222);
+let camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+camera.position.y = 1.6;
+let renderer = new THREE.WebGLRenderer();
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+// --- FPS Controls ---
+let controls = new THREE.PointerLockControls(camera, document.body);
+document.body.addEventListener('click', ()=>{ controls.lock(); });
+
+// --- Floor ---
+let floor = new THREE.Mesh(new THREE.PlaneGeometry(50,50), new THREE.MeshBasicMaterial({color:0x444444}));
+floor.rotation.x=-Math.PI/2;
+scene.add(floor);
+
+// --- Buildings ---
+function createWall(x,z,w=1,h=3,d=1){ 
+  let wall=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshBasicMaterial({color:0x888888})); 
+  wall.position.set(x,h/2,z); 
+  scene.add(wall); 
+  return wall; 
+}
+for(let i=-20;i<=20;i+=4) for(let j=-20;j<=20;j+=4) if(Math.random()>0.3) createWall(i,j);
+
+// --- Math Objective ---
+function createObjective(){ 
+  let obj=new THREE.Mesh(new THREE.BoxGeometry(1,0.5,1), new THREE.MeshBasicMaterial({color:0x00ff00})); 
+  obj.position.set((Math.random()-0.5)*40,0.25,-Math.random()*40-2); 
+  scene.add(obj); 
+  return obj; 
+}
+let objective=createObjective();
+
+// --- Bombsite ---
+let bombsite=new THREE.Mesh(new THREE.BoxGeometry(2,0.1,2), new THREE.MeshBasicMaterial({color:0xffff00}));
+bombsite.position.set(10,0.05,-10);
+scene.add(bombsite);
+
+// --- Bomb ---
+let bombPlanted=false; let bombTimer=30; let bombObject;
+
+// --- Scores & Timer ---
+let blueScore=0,redScore=0;
+let overlayBlue=document.getElementById('blueScore');
+let overlayRed=document.getElementById('redScore');
+let overlayTimer=document.getElementById('timer');
+let timeLeft=300;
+setInterval(()=>{timeLeft--; overlayTimer.innerText=timeLeft;},1000);
+
+// --- Movement ---
+let move={forward:false,back:false,left:false,right:false};
+document.addEventListener('keydown',e=>{if(e.key=='w')move.forward=true;if(e.key=='s')move.back=true;if(e.key=='a')move.left=true;if(e.key=='d')move.right=true;});
+document.addEventListener('keyup',e=>{if(e.key=='w')move.forward=false;if(e.key=='s')move.back=false;if(e.key=='a')move.left=false;if(e.key=='d')move.right=false;});
+
+// --- Laser ---
+document.addEventListener('mousedown',()=>{
+  let laserMat=new THREE.LineBasicMaterial({color:0xff0000});
+  let forward=new THREE.Vector3(0,0,-1).applyEuler(camera.rotation);
+  let points=[camera.position.clone(), camera.position.clone().add(forward.multiplyScalar(20))];
+  let laser=new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), laserMat);
+  scene.add(laser);
+  setTimeout(()=>scene.remove(laser),100);
+
+  let ray=new THREE.Raycaster(camera.position,forward.normalize());
+  if(ray.intersectObject(objective).length>0){
+    let answer=prompt("Solve: 2x+4=12. Type x=");
+    if(answer=="4"){blueScore++; overlayBlue.innerText=blueScore; scene.remove(objective); objective=createObjective(); alert("Correct!");} 
+    else alert("Wrong!");
+  }
+});
+
+// --- Plant Bomb ---
+document.addEventListener('keydown', e=>{
+  if(e.key=='e' && !bombPlanted && camera.position.distanceTo(bombsite.position)<2){
+    bombPlanted=true;
+    bombObject=new THREE.Mesh(new THREE.BoxGeometry(0.3,0.3,0.3),new THREE.MeshBasicMaterial({color:0xff00ff}));
+    bombObject.position.set(bombsite.position.x,0.15,bombsite.position.z);
+    scene.add(bombObject);
+    alert("Bomb planted! Explodes in 30 seconds!");
+    setTimeout(()=>{
+      if(bombPlanted){scene.remove(bombObject); alert("BOOM! Bomb exploded!"); bombPlanted=false;}
+    },bombTimer*1000);
+  }
+});
+
+// --- Animate ---
+function animate(){
+  requestAnimationFrame(animate);
+  let dir=new THREE.Vector3();
+  let speed=0.1;
+  if(move.forward) dir.z-=speed;if(move.back) dir.z+=speed;if(move.left) dir.x-=speed;if(move.right) dir.x+=speed;
+  controls.moveRight(dir.x); controls.moveForward(dir.z);
+  renderer.render(scene,camera);
+}
+animate();
+</script>
+</body>
+</html>
